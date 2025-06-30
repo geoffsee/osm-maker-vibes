@@ -13,8 +13,51 @@ Generates a GLB file from OSM data for the configured area.
 
 ## Usage
 
+### 1. Configure
+```jsonc
+{
+  // OSM Maker Configuration File
+  // This file demonstrates JSONC (JSON with Comments) support
+  
+  "osmData": {
+    "useLocalExtract": false, // Set to true to use local OSM file
+    "localFilePath": "virginia.osm.pbf",
+    
+    /* Bounding box configuration
+     * Defines the geographic area to process
+     */
+    "boundingBox": {
+      "south": 37.115,   // Southern latitude boundary
+      "west": -76.396,   // Western longitude boundary  
+      "north": 37.139,   // Northern latitude boundary
+      "east": -76.345,   // Eastern longitude boundary
+      "description": "Poquoson, VA" // Human-readable description
+    },
+    
+    "overpassTimeout": 25 // Timeout for Overpass API queries in seconds
+  },
+  
+  // Projection settings for coordinate transformation
+  "projection": {
+    "origin": {
+      "latitude": 37.120907,  // Center point latitude
+      "longitude": -76.333694 // Center point longitude
+    }
+  },
+  
+  /* Output configuration
+   * Controls how the final 3D model is generated and handled
+   */
+  "output": {
+    "fileName": "municipality.glb", // Output file name
+    "autoOpen": true // Whether to automatically open the generated file
+  }
+  
+  // End of configuration
+}
+```
+### 2. Run
 ```bash
-# 1.  configure ./config.jsonc
-# 2. generate the glb
+
 ./gradlew run
 ```
