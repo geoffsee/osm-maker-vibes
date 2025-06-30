@@ -35,7 +35,7 @@ jobs:
         gradle-home-cache-cleanup: true
         
     - name: Cache Kotlin/JS dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.gradle/caches
