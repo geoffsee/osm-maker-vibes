@@ -10,22 +10,39 @@ fun main() {
        LOAD AND DEMONSTRATE JSON CONFIGURATION
        ---------------------------------------------------------------- */
 
-    val configFile = File("config.json")
-    if (!configFile.exists()) {
-        println("Error: config.json not found in current directory")
-        println("Please ensure config.json exists in the working directory")
-        return
+    // Try to find configuration file (prefer .jsonc, fallback to .json)
+    val configFile = when {
+        File("config.jsonc").exists() -> File("config.jsonc")
+        File("config.json").exists() -> File("config.json")
+        else -> {
+            println("Error: No configuration file found")
+            println("Please ensure either config.jsonc or config.json exists in the working directory")
+            return
+        }
     }
 
     val config = try {
         val configText = configFile.readText()
-        Json.decodeFromString<Config>(configText)
+        when (configFile.extension.lowercase()) {
+            "jsonc" -> {
+                println("📄 Loading JSONC configuration from ${configFile.name}")
+                parseJsonc(configText)
+            }
+            "json" -> {
+                println("📄 Loading JSON configuration from ${configFile.name}")
+                Json.decodeFromString<Config>(configText)
+            }
+            else -> {
+                println("Error: Unsupported configuration file format: ${configFile.extension}")
+                return
+            }
+        }
     } catch (e: Exception) {
         println("Error reading configuration: ${e.message}")
         return
     }
 
-    println("\n✅ Configuration loaded successfully from config.json!")
+    println("\n✅ Configuration loaded successfully from ${configFile.name}!")
     println("📍 Area: ${config.osmData.boundingBox.description}")
     println("📂 Use local extract: ${config.osmData.useLocalExtract}")
     println("📄 Local file path: ${config.osmData.localFilePath}")
@@ -67,6 +84,6 @@ fun main() {
         println("5. Auto-open is disabled, file would remain closed")
     }
 
-    println("\n✨ JSON configuration reading implementation complete!")
-    println("🎉 The app now successfully reads configuration from JSON instead of using hardcoded values.")
+    println("\n✨ JSON/JSONC configuration reading implementation complete!")
+    println("🎉 The app now successfully reads configuration from JSON and JSONC files with comment support!")
 }
