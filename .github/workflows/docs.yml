@@ -1,0 +1,189 @@
+name: Documentation
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'README*.md'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'README*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  generate-docs:
+    name: Generate Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Setup Gradle
+      uses: gradle/gradle-build-action@v2
+      
+    - name: Add Dokka plugin to build.gradle.kts
+      run: |
+        if ! grep -q "dokka" build.gradle.kts; then
+          sed -i '/kotlin("plugin.serialization")/a\    id("org.jetbrains.dokka") version "1.9.10"' build.gradle.kts
+        fi
+        
+    - name: Generate API documentation
+      run: ./gradlew dokkaHtml --stacktrace
+      
+    - name: Create documentation site structure
+      run: |
+        mkdir -p docs-site
+        
+        # Copy generated API docs
+        if [ -d "build/dokka/html" ]; then
+          cp -r build/dokka/html/* docs-site/
+        fi
+        
+        # Create index.html if it doesn't exist
+        if [ ! -f "docs-site/index.html" ]; then
+          cat > docs-site/index.html << 'EOF'
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>OSM Maker Documentation</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 40px; }
+                .header { border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 30px; }
+                .section { margin: 20px 0; }
+                .link-card { 
+                    display: block; 
+                    padding: 15px; 
+                    border: 1px solid #ddd; 
+                    border-radius: 8px; 
+                    text-decoration: none; 
+                    color: inherit; 
+                    margin: 10px 0;
+                    transition: box-shadow 0.2s;
+                }
+                .link-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+                .link-title { font-weight: bold; color: #0366d6; }
+                .link-desc { color: #666; margin-top: 5px; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>OSM Maker Documentation</h1>
+                <p>A Kotlin multiplatform tool for processing OpenStreetMap data and generating 3D models.</p>
+            </div>
+            
+            <div class="section">
+                <h2>Documentation</h2>
+                <a href="api/" class="link-card">
+                    <div class="link-title">API Documentation</div>
+                    <div class="link-desc">Generated API documentation for all modules</div>
+                </a>
+            </div>
+            
+            <div class="section">
+                <h2>Quick Links</h2>
+                <a href="https://github.com/your-username/osm-maker" class="link-card">
+                    <div class="link-title">GitHub Repository</div>
+                    <div class="link-desc">Source code and issue tracking</div>
+                </a>
+                <a href="https://github.com/your-username/osm-maker/releases" class="link-card">
+                    <div class="link-title">Releases</div>
+                    <div class="link-desc">Download the latest version</div>
+                </a>
+            </div>
+        </body>
+        </html>
+        EOF
+        fi
+        
+        # Move API docs to subdirectory
+        if [ -d "build/dokka/html" ]; then
+          mkdir -p docs-site/api
+          cp -r build/dokka/html/* docs-site/api/
+        fi
+        
+    - name: Upload documentation artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: documentation
+        path: docs-site/
+        
+    - name: Setup Pages
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: actions/configure-pages@v3
+      
+    - name: Upload to GitHub Pages
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: actions/upload-pages-artifact@v2
+      with:
+        path: docs-site/
+        
+  deploy-docs:
+    name: Deploy Documentation
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: generate-docs
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+      
+    steps:
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v2
+      
+  validate-links:
+    name: Validate Documentation Links
+    runs-on: ubuntu-latest
+    needs: generate-docs
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Download documentation
+      uses: actions/download-artifact@v3
+      with:
+        name: documentation
+        path: docs-site/
+        
+    - name: Install link checker
+      run: npm install -g markdown-link-check
+      
+    - name: Check README links
+      run: |
+        find . -name "README*.md" -exec markdown-link-check {} \;
+        
+    - name: Serve documentation locally
+      run: |
+        cd docs-site
+        python3 -m http.server 8000 &
+        sleep 5
+        
+    - name: Check documentation accessibility
+      run: |
+        curl -f http://localhost:8000/ || exit 1
+        if [ -d "docs-site/api" ]; then
+          curl -f http://localhost:8000/api/ || exit 1
+        fi

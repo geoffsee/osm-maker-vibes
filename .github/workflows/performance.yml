@@ -1,0 +1,284 @@
+name: Performance Monitoring
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 4 * * 0' # Weekly on Sunday at 4 AM UTC
+  workflow_dispatch:
+
+jobs:
+  build-performance:
+    name: Build Performance Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Setup Gradle
+      uses: gradle/gradle-build-action@v2
+      with:
+        gradle-home-cache-cleanup: true
+        
+    - name: Warm up Gradle daemon
+      run: ./gradlew help --stacktrace
+      
+    - name: Clean build performance test
+      run: |
+        echo "🧹 Testing clean build performance..."
+        ./gradlew clean
+        
+        START_TIME=$(date +%s)
+        ./gradlew build --stacktrace
+        END_TIME=$(date +%s)
+        
+        BUILD_TIME=$((END_TIME - START_TIME))
+        echo "Clean build time: ${BUILD_TIME} seconds"
+        echo "CLEAN_BUILD_TIME=${BUILD_TIME}" >> $GITHUB_ENV
+        
+    - name: Incremental build performance test
+      run: |
+        echo "⚡ Testing incremental build performance..."
+        
+        START_TIME=$(date +%s)
+        ./gradlew build --stacktrace
+        END_TIME=$(date +%s)
+        
+        INCREMENTAL_TIME=$((END_TIME - START_TIME))
+        echo "Incremental build time: ${INCREMENTAL_TIME} seconds"
+        echo "INCREMENTAL_BUILD_TIME=${INCREMENTAL_TIME}" >> $GITHUB_ENV
+        
+    - name: Test execution performance
+      run: |
+        echo "🧪 Testing test execution performance..."
+        
+        START_TIME=$(date +%s)
+        ./gradlew test --stacktrace
+        END_TIME=$(date +%s)
+        
+        TEST_TIME=$((END_TIME - START_TIME))
+        echo "Test execution time: ${TEST_TIME} seconds"
+        echo "TEST_EXECUTION_TIME=${TEST_TIME}" >> $GITHUB_ENV
+        
+    - name: WASM build performance test
+      run: |
+        echo "🌐 Testing WASM build performance..."
+        
+        START_TIME=$(date +%s)
+        ./gradlew wasmJsBrowserDistribution --stacktrace
+        END_TIME=$(date +%s)
+        
+        WASM_TIME=$((END_TIME - START_TIME))
+        echo "WASM build time: ${WASM_TIME} seconds"
+        echo "WASM_BUILD_TIME=${WASM_TIME}" >> $GITHUB_ENV
+        
+    - name: Generate performance report
+      run: |
+        mkdir -p performance-reports
+        
+        cat > performance-reports/build-performance.md << EOF
+        # Build Performance Report
+        
+        Generated on: $(date)
+        Commit: ${{ github.sha }}
+        Branch: ${{ github.ref_name }}
+        
+        ## Build Times
+        
+        | Build Type | Time (seconds) | Status |
+        |------------|----------------|--------|
+        | Clean Build | ${CLEAN_BUILD_TIME} | $([ ${CLEAN_BUILD_TIME} -lt 120 ] && echo "✅ Good" || echo "⚠️ Slow") |
+        | Incremental Build | ${INCREMENTAL_BUILD_TIME} | $([ ${INCREMENTAL_BUILD_TIME} -lt 30 ] && echo "✅ Good" || echo "⚠️ Slow") |
+        | Test Execution | ${TEST_EXECUTION_TIME} | $([ ${TEST_EXECUTION_TIME} -lt 60 ] && echo "✅ Good" || echo "⚠️ Slow") |
+        | WASM Build | ${WASM_BUILD_TIME} | $([ ${WASM_BUILD_TIME} -lt 90 ] && echo "✅ Good" || echo "⚠️ Slow") |
+        
+        ## Performance Thresholds
+        
+        - Clean Build: < 2 minutes (120s)
+        - Incremental Build: < 30 seconds
+        - Test Execution: < 1 minute (60s)
+        - WASM Build: < 1.5 minutes (90s)
+        
+        ## Recommendations
+        
+        $(if [ ${CLEAN_BUILD_TIME} -gt 120 ]; then
+          echo "- 🐌 Clean build is slow. Consider optimizing dependencies or build configuration."
+        fi)
+        $(if [ ${INCREMENTAL_BUILD_TIME} -gt 30 ]; then
+          echo "- 🐌 Incremental build is slow. Check for unnecessary recompilation."
+        fi)
+        $(if [ ${TEST_EXECUTION_TIME} -gt 60 ]; then
+          echo "- 🐌 Test execution is slow. Consider parallelizing tests or optimizing test setup."
+        fi)
+        $(if [ ${WASM_BUILD_TIME} -gt 90 ]; then
+          echo "- 🐌 WASM build is slow. Check WASM-specific optimizations."
+        fi)
+        
+        EOF
+        
+    - name: Upload performance reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-reports
+        path: performance-reports/
+        
+    - name: Comment performance results on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const report = fs.readFileSync('performance-reports/build-performance.md', 'utf8');
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `## 📊 Performance Report\n\n${report}`
+          });
+          
+  memory-analysis:
+    name: Memory Usage Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Setup Gradle
+      uses: gradle/gradle-build-action@v2
+      
+    - name: Analyze build memory usage
+      run: |
+        echo "🧠 Analyzing memory usage during build..."
+        
+        # Run build with memory profiling
+        ./gradlew build --stacktrace \
+          -Dorg.gradle.jvmargs="-Xmx2g -XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \
+          > build-memory.log 2>&1 || true
+          
+        # Extract memory information
+        if [ -f build-memory.log ]; then
+          echo "Memory analysis completed. Check build-memory.log for details."
+        fi
+        
+    - name: Generate memory report
+      run: |
+        mkdir -p performance-reports
+        
+        cat > performance-reports/memory-analysis.md << 'EOF'
+        # Memory Usage Analysis
+        
+        Generated on: $(date)
+        
+        ## Build Memory Configuration
+        
+        - Max Heap Size: 2GB
+        - GC Details: Enabled
+        
+        ## Analysis
+        
+        Memory usage analysis has been performed during the build process.
+        Check the build logs for detailed GC information and memory patterns.
+        
+        ## Recommendations
+        
+        - Monitor heap usage during builds
+        - Adjust -Xmx settings if builds fail with OutOfMemoryError
+        - Consider using G1GC for large projects: -XX:+UseG1GC
+        
+        EOF
+        
+    - name: Upload memory analysis
+      uses: actions/upload-artifact@v3
+      with:
+        name: memory-analysis
+        path: |
+          performance-reports/
+          build-memory.log
+          
+  size-analysis:
+    name: Artifact Size Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Setup Gradle
+      uses: gradle/gradle-build-action@v2
+      
+    - name: Build artifacts
+      run: |
+        ./gradlew clean build jvmJar wasmJsBrowserDistribution --stacktrace
+        
+    - name: Analyze artifact sizes
+      run: |
+        echo "📏 Analyzing artifact sizes..."
+        
+        mkdir -p performance-reports
+        
+        cat > performance-reports/size-analysis.md << 'EOF'
+        # Artifact Size Analysis
+        
+        Generated on: $(date)
+        
+        ## JVM Artifacts
+        
+        EOF
+        
+        if [ -d "build/libs" ]; then
+          echo "| File | Size |" >> performance-reports/size-analysis.md
+          echo "|------|------|" >> performance-reports/size-analysis.md
+          find build/libs -name "*.jar" -exec ls -lh {} \; | awk '{print "| " $9 " | " $5 " |"}' >> performance-reports/size-analysis.md
+        fi
+        
+        cat >> performance-reports/size-analysis.md << 'EOF'
+        
+        ## WASM Artifacts
+        
+        EOF
+        
+        if [ -d "build/dist/wasmJs/productionExecutable" ]; then
+          echo "| File | Size |" >> performance-reports/size-analysis.md
+          echo "|------|------|" >> performance-reports/size-analysis.md
+          find build/dist/wasmJs/productionExecutable -name "*.wasm" -o -name "*.js" | head -10 | xargs ls -lh | awk '{print "| " $9 " | " $5 " |"}' >> performance-reports/size-analysis.md
+        fi
+        
+        cat >> performance-reports/size-analysis.md << 'EOF'
+        
+        ## Size Recommendations
+        
+        - Monitor artifact sizes to prevent bloat
+        - Consider code splitting for WASM builds
+        - Use ProGuard/R8 for JVM artifact optimization
+        - Analyze dependency contributions to size
+        
+        EOF
+        
+    - name: Upload size analysis
+      uses: actions/upload-artifact@v3
+      with:
+        name: size-analysis
+        path: performance-reports/

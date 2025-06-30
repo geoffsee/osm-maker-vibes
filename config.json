@@ -1,0 +1,24 @@
+{
+  "osmData": {
+    "useLocalExtract": false,
+    "localFilePath": "virginia.osm.pbf",
+    "boundingBox": {
+      "south": 37.115,
+      "west": -76.396,
+      "north": 37.139,
+      "east": -76.345,
+      "description": "Poquoson, VA"
+    },
+    "overpassTimeout": 25
+  },
+  "projection": {
+    "origin": {
+      "latitude": 37.120907,
+      "longitude": -76.333694
+    }
+  },
+  "output": {
+    "fileName": "municipality.glb",
+    "autoOpen": true
+  }
+}
