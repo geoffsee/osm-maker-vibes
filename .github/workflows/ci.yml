@@ -30,7 +30,7 @@ jobs:
         distribution: 'temurin'
         
     - name: Setup Gradle
-      uses: gradle/gradle-build-action@v2
+      uses: gradle/gradle-build-action@v3
       with:
         gradle-home-cache-cleanup: true
         
@@ -73,7 +73,7 @@ jobs:
         distribution: 'temurin'
         
     - name: Setup Gradle
-      uses: gradle/gradle-build-action@v2
+      uses: gradle/gradle-build-action@v3
       
     - name: Build JVM target
       run: ./gradlew jvmJar --stacktrace
@@ -112,7 +112,7 @@ jobs:
         distribution: 'temurin'
         
     - name: Setup Gradle
-      uses: gradle/gradle-build-action@v2
+      uses: gradle/gradle-build-action@v3
       
     - name: Run detekt
       run: ./gradlew detekt --stacktrace || true
@@ -161,7 +161,7 @@ jobs:
         distribution: 'temurin'
         
     - name: Setup Gradle
-      uses: gradle/gradle-build-action@v2
+      uses: gradle/gradle-build-action@v3
       
     - name: Run dependency check
       run: ./gradlew dependencyCheckAnalyze --stacktrace || true
